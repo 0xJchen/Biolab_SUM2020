@@ -16,9 +16,9 @@ def to_img(x):
     x = x.view(x.size(0), 1, 28, 28)
     return x
 
+bottleneck_dim=5
 
-GPU_NUM = 4
-
+GPU_NUM = 5
 num_epochs = 100
 batch_size = 128
 learning_rate = 1e-3
@@ -33,12 +33,15 @@ testset = MNIST('./data', transform=img_transform, download=True, train=False)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 testloader = DataLoader(testset, batch_size=batch_size, shuffle=True)
+
+
 def get_device():
     if torch.cuda.is_available():
-        device = 'cuda:4'
+        device = 'cuda:5'
     else:
         device = 'cpu'
     return device
+
 
 class autoencoder(nn.Module):
     def __init__(self):
@@ -47,9 +50,9 @@ class autoencoder(nn.Module):
             nn.Linear(28 * 28, 128),
             nn.ReLU(True),
             nn.Linear(128, 64),
-            nn.ReLU(True), nn.Linear(64, 12), nn.ReLU(True), nn.Linear(12, 2))
+            nn.ReLU(True), nn.Linear(64, 12), nn.ReLU(True), nn.Linear(12, bottleneck_dim))
         self.decoder = nn.Sequential(
-            nn.Linear(2, 12),
+            nn.Linear(bottleneck_dim, 12),
             nn.ReLU(True),
             nn.Linear(12, 64),
             nn.ReLU(True),
@@ -69,16 +72,16 @@ class new_autoencoder(nn.Module):
             nn.Linear(28 * 28, 128),
             nn.ReLU(True),
             nn.Linear(128, 64),
-            nn.ReLU(True), nn.Linear(64, 12), nn.ReLU(True), nn.Linear(12, 2))
+            nn.ReLU(True), nn.Linear(64, 12), nn.ReLU(True), nn.Linear(12, bottleneck_dim))
 
-        self.lower_encoder=nn.Sequential(
+        self.lower_encoder = nn.Sequential(
             nn.Linear(28 * 28, 128),
             nn.ReLU(True),
             nn.Linear(128, 64),
-            nn.ReLU(True), nn.Linear(64, 12), nn.ReLU(True), nn.Linear(12, 2))
+            nn.ReLU(True), nn.Linear(64, 12), nn.ReLU(True), nn.Linear(12, bottleneck_dim))
 
         self.decoder = nn.Sequential(
-            nn.Linear(4, 12),
+            nn.Linear(bottleneck_dim*2, 12),
             nn.ReLU(True),
             nn.Linear(12, 64),
             nn.ReLU(True),
@@ -88,21 +91,13 @@ class new_autoencoder(nn.Module):
     def forward(self, x):
         c = self.upper_encoder(x)
         f = self.lower_encoder(x)
-        combined=torch.cat((c.view(c.size(0), -1),
-                          f.view(f.size(0), -1)), dim=1)
-        out=self.decoder(combined)
+        combined = torch.cat((c.view(c.size(0), -1),
+                              f.view(f.size(0), -1)), dim=1)
+        out = self.decoder(combined)
         return out
 
-# def old_test_image_reconstruction(net, testloader):
-#     for batch in testloader:
-#         img, _ = batch
-#         img = img.to(device)
-#         img = img.view(img.size(0), -1)
-#         outputs = net(img)
-#         outputs = outputs.view(outputs.size(0), 1, 28, 28).cpu().data
-#         save_image(outputs, './test/old_reconstruction.png')
-#         break
-def test_image_reconstruction(net1,net2, testloader):
+
+def test_image_reconstruction(net1, net2, testloader):
     for batch in testloader:
         img, _ = batch
         img = img.to(device)
@@ -111,20 +106,22 @@ def test_image_reconstruction(net1,net2, testloader):
         outputs2 = net2(img)
         outputs1 = outputs1.view(outputs1.size(0), 1, 28, 28).cpu().data
         outputs2 = outputs2.view(outputs2.size(0), 1, 28, 28).cpu().data
-        save_image(outputs1, './test/older_reconstruction.png')
-        save_image(outputs2, './test/newer_reconstruction.png')
-        break             
+        save_image(outputs1, './test/{}_reconstruction.png'.format(bottleneck_dim))
+        save_image(outputs2, './test/{}_reconstruction.png'.format(bottleneck_dim*2))
+        img = img.view(img.size(0), 1, 28, 28).cpu().data
+        save_image(img, './test/{}_raw.png'.format(bottleneck_dim*2))
+        break
+
 
 device = get_device()
-#test with old output
+# test with old output
 model = autoencoder()
 model.load_state_dict(torch.load('./weight/sim_autoencoder.pth'))
 model.to(device)
 
-#test with new output
-new_model=new_autoencoder()
+# test with new output
+new_model = new_autoencoder()
 new_model.load_state_dict(torch.load('./weight/new_autoencoder.pth'))
 new_model.to(device)
 
-test_image_reconstruction(model,new_model, testloader)
-
+test_image_reconstruction(model, new_model, testloader)
